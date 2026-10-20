@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MUDRIK (مُدرك) — Smart Underground Waste-Container Monitoring & Route Optimization</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+            },
+            navy: {
+              800: '#1e293b',
+              900: '#0f172a',
+              950: '#020617',
+            },
+            accent: {
+              green: '#10b981',
+              yellow: '#eab308',
+              orange: '#f97316',
+              red: '#ef4444',
+              blue: '#2563eb'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'Tajawal', 'system-ui', '-apple-system', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Inter & Tajawal for modern English/Arabic bilingual typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+  <!-- Leaflet GIS CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', 'Tajawal', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .leaflet-popup-content-wrapper {
+      border-radius: 0.75rem;
+      padding: 0;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+    .leaflet-popup-content {
+      margin: 0;
+      line-height: 1.4;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .pulse-urgent {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+      animation: pulse-ring 1.8s infinite cubic-bezier(0.66, 0, 0, 1);
+    }
+    @keyframes pulse-ring {
+      to {
+        box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+      }
+    }
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printReportArea, #printReportArea * {
+        visibility: visible;
+      }
+      #printReportArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- TOP BANNER: DEMO & HACKATHON DISCLAIMER -->
+  <div class="bg-amber-500/10 border-b border-amber-500/30 text-amber-900 text-xs px-4 py-1.5 flex items-center justify-between font-medium">
+    <div class="flex items-center space-x-2 rtl:space-x-reverse mx-auto md:mx-0">
+      <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white font-bold text-[10px]">!</span>
+      <span id="demoNotice">DEMO MODE — Simulated Data Prototype for Jeddah Municipal Waste Operations. No real sensors or live GPS connected.</span>
+    </div>
+    <div class="hidden md:flex items-center space-x-3 rtl:space-x-reverse">
+      <span class="text-amber-800 text-[11px] bg-amber-100 px-2 py-0.5 rounded-full font-mono">Simulated Zone: Corniche & Central Jeddah</span>
+      <button onclick="resetSimulation()" class="bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 text-[11px] px-2.5 py-0.5 rounded shadow-sm font-semibold transition">
+        <span id="btnResetSimulation">Reset Simulation Data</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- HEADER NAVIGATION -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        
+        <!-- Logo & Brand -->
+        <div class="flex items-center space-x-3 rtl:space-x-reverse">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-700 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-brand-700/20">
+            <!-- Smart Container Icon -->
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-baseline space-x-1.5 rtl:space-x-reverse">
+              <span class="text-xl font-extrabold tracking-tight text-navy-900 font-sans">MUDRIK</span>
+              <span class="text-lg font-bold text-brand-600 font-sans">مُدرك</span>
+              <span class="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">Jeddah Pilot</span>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-none" id="brandSub">Underground Waste Monitoring & Route Optimization</p>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="hidden md:flex space-x-1 rtl:space-x-reverse">
+          <button onclick="switchTab('dashboard')" id="tab-dashboard" class="nav-tab px-3 py-2 rounded-lg text-sm font-semibold transition text-brand-700 bg-brand-50">
+            <span id="navOverview">Overview Dashboard</span>
+          </button>
+          <button onclick="switchTab('monitoring')" id="tab-monitoring" class="nav-tab px-3 py-2 rounded-lg text-sm font-medium transition text-slate-600 hover:text-navy-900 hover:bg-slate-100">
+            <span id="navContainers">Container Map</span>
+          </button>
+          <button onclick="switchTab('routes')" id="tab-routes" class="nav-tab px-3 py-2 rounded-lg text-sm font-medium transition text-slate-600 hover:text-navy-900 hover:bg-slate-100">
+            <span id="navRoutes">Route Planner</span>
+          </button>
+          <button onclick="switchTab('comparison')" id="tab-comparison" class="nav-tab px-3 py-2 rounded-lg text-sm font-medium transition text-slate-600 hover:text-navy-900 hover:bg-slate-100">
+            <span id="navComparison">Baseline Matrix</span>
+          </button>
+          <button onclick="switchTab('history')" id="tab-history" class="nav-tab px-3 py-2 rounded-lg text-sm font-medium transition text-slate-600 hover:text-navy-900 hover:bg-slate-100">
+            <span id="navHistory">Collection Logs</span>
+          </button>
+          <button onclick="switchTab('analytics')" id="tab-analytics" class="nav-tab px-3 py-2 rounded-lg text-sm font-medium transition text-slate-600 hover:text-navy-900 hover:bg-slate-100">
+            <span id="navAnalytics">KPI Reports</span>
+          </button>
+          <button onclick="switchTab('methodology')" id="tab-methodology" class="nav-tab px-3 py-2 rounded-lg text-sm font-medium transition text-slate-600 hover:text-navy-900 hover:bg-slate-100">
+            <span id="navMethodology">System Specs</span>
+          </button>
+        </nav>
+
+        <!-- Right Controls: Language switch & Quick Status -->
+        <div class="flex items-center space-x-2 rtl:space-x-reverse">
+          <!-- Language Toggle Button -->
+          <button onclick="toggleLanguage()" class="flex items-center space-x-1 rtl:space-x-reverse px-2.5 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-100 text-xs font-semibold text-slate-700 transition">
+            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
+            </svg>
+            <span id="langLabel">العربية</span>
+          </button>
+
+          <!-- Export Report Quick Button -->
+          <button onclick="exportQuickReport()" class="hidden lg:flex items-center space-x-1.5 rtl:space-x-reverse bg-navy-900 hover:bg-navy-800 text-white text-xs font-medium py-1.5 px-3 rounded-lg shadow-sm transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            <span id="btnExport">Export PDF</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Mobile Sub-nav -->
+    <div class="md:hidden flex overflow-x-auto border-t border-slate-200 px-3 py-2 space-x-2 rtl:space-x-reverse text-xs font-medium">
+      <button onclick="switchTab('dashboard')" class="whitespace-nowrap px-2.5 py-1 rounded bg-brand-50 text-brand-700">Overview</button>
+      <button onclick="switchTab('monitoring')" class="whitespace-nowrap px-2.5 py-1 rounded text-slate-600">Container Map</button>
+      <button onclick="switchTab('routes')" class="whitespace-nowrap px-2.5 py-1 rounded text-slate-600">Route Planner</button>
+      <button onclick="switchTab('comparison')" class="whitespace-nowrap px-2.5 py-1 rounded text-slate-600">Baseline Matrix</button>
+      <button onclick="switchTab('history')" class="whitespace-nowrap px-2.5 py-1 rounded text-slate-600">Logs</button>
+      <button onclick="switchTab('analytics')" class="whitespace-nowrap px-2.5 py-1 rounded text-slate-600">Analytics</button>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+    <!-- 1. TAB: OVERVIEW DASHBOARD -->
+    <section id="view-dashboard" class="space-y-6">
+      
+      <!-- Welcome & Context Banner -->
+      <div class="bg-gradient-to-r from-navy-950 via-navy-900 to-brand-900 rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div class="inline-flex items-center space-x-2 rtl:space-x-reverse bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-xs font-semibold mb-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="badgeLiveSim">Simulated Telemetry Engine Active</span>
+          </div>
+          <h1 class="text-2xl font-bold tracking-tight text-white mb-1" id="dashTitle">Municipal Waste Operations Center — Jeddah Central District</h1>
+          <p class="text-sm text-slate-300 max-w-2xl" id="dashSub">
+            Continuous underground container fill monitoring via simulated LoRaWAN ultrasonic depth sensors. Dynamic routing mitigates overflow risks and reduces diesel consumption.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="switchTab('routes')" class="bg-brand-500 hover:bg-brand-600 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center space-x-1.5 rtl:space-x-reverse">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <span id="btnRunOptimizer">Open Route Optimizer</span>
+          </button>
+          <button onclick="simulateTelemetryCycle()" class="bg-white/10 hover:bg-white/20 text-white border border-white/20 font-medium text-xs px-3 py-2.5 rounded-xl transition flex items-center space-x-1.5 rtl:space-x-reverse">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span id="btnSimulateTick">Simulate +4h Fill Growth</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 8 KEY METRICS CARDS -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        
+        <!-- Metric 1: Total Underground Containers -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm hover:shadow transition">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase mb-1">
+            <span id="kpi1_title">Total Containers</span>
+            <span class="p-1.5 rounded-lg bg-slate-100 text-slate-700">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            </span>
+          </div>
+          <div class="flex items-baseline space-x-2 rtl:space-x-reverse">
+            <span id="metricTotalContainers" class="text-2xl font-black text-navy-900">50</span>
+            <span class="text-xs text-slate-500 font-medium">units (Jeddah)</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
+            <span id="kpi1_sub">Al-Shati, Al-Hamra, Corniche</span>
+            <span class="text-emerald-600 font-semibold" id="metricActiveSensors">47 Active</span>
+          </div>
+        </div>
+
+        <!-- Metric 2: Requiring Collection -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm hover:shadow transition">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase mb-1">
+            <span id="kpi2_title">Need Collection (≥75%)</span>
+            <span class="p-1.5 rounded-lg bg-amber-50 text-amber-600">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </span>
+          </div>
+          <div class="flex items-baseline space-x-2 rtl:space-x-reverse">
+            <span id="metricNeedCollection" class="text-2xl font-black text-amber-600">18</span>
+            <span class="text-xs text-slate-500 font-medium" id="metricNeedColPct">36% of fleet</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
+            <span id="kpi2_sub">Threshold dispatch</span>
+            <span class="text-amber-600 font-semibold">Priority queued</span>
+          </div>
+        </div>
+
+        <!-- Metric 3: Critical Overflow Risk -->
+        <div class="bg-white p-4 rounded-xl border border-red-200 shadow-sm hover:shadow transition bg-red-50/20">
+          <div class="flex items-center justify-between text-red-600 text-xs font-semibold uppercase mb-1">
+            <span id="kpi3_title">Critical Overflow Risk</span>
+            <span class="p-1.5 rounded-lg bg-red-100 text-red-600">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </span>
+          </div>
+          <div class="flex items-baseline space-x-2 rtl:space-x-reverse">
+            <span id="metricCriticalCount" class="text-2xl font-black text-red-600">5</span>
+            <span class="text-xs text-red-500 font-medium">≥ 90% full</span>
+          </div>
+          <div class="mt-2 text-[11px] text-red-600 flex items-center justify-between font-semibold">
+            <span id="kpi3_sub">Immediate dispatch</span>
+            <span class="underline cursor-pointer" onclick="filterMapByStatus('red')">Highlight on Map</span>
+          </div>
+        </div>
+
+        <!-- Metric 4: Active Collection Trucks -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm hover:shadow transition">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase mb-1">
+            <span id="kpi4_title">Active Compactor Trucks</span>
+            <span class="p-1.5 rounded-lg bg-brand-50 text-brand-600">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+            </span>
+          </div>
+          <div class="flex items-baseline space-x-2 rtl:space-x-reverse">
+            <span id="metricActiveTrucks" class="text-2xl font-black text-navy-900">3 / 4</span>
+            <span class="text-xs text-slate-500 font-medium">ready</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
+            <span id="kpi4_sub">Jeddah Municipal Depot</span>
+            <span class="text-brand-600 font-semibold">60 m³ Capacity</span>
+          </div>
+        </div>
+
+        <!-- Metric 5: Planned Route Distance -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm hover:shadow transition">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase mb-1">
+            <span id="kpi5_title">Optimized Route Distance</span>
+            <span class="p-1.5 rounded-lg bg-teal-50 text-teal-600">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            </span>
+          </div>
+          <div class="flex items-baseline space-x-2 rtl:space-x-reverse">
+            <span id="metricRouteKm" class="text-2xl font-black text-brand-700">38.4</span>
+            <span class="text-xs text-slate-500 font-medium">km</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
+            <span id="kpi5_sub">Baseline was 84.2 km</span>
+            <span class="text-emerald-600 font-semibold">-45.8 km</span>
+          </div>
+        </div>
+
+        <!-- Metric 6: Fuel Consumption Estimate -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm hover:shadow transition">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase mb-1">
+            <span id="kpi6_title">Est. Diesel Consumed</span>
+            <span class="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+            </span>
+          </div>
+          <div class="flex items-baseline space-x-2 rtl:space-x-reverse">
+            <span id="metricFuelLiters" class="text-2xl font-black text-navy-900">14.6</span>
+            <span class="text-xs text-slate-500 font-medium">Liters</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
+            <span id="kpi6_sub">At 38 L/100 km rating</span>
+            <span class="text-emerald-600 font-semibold">Saved ~17.4 L</span>
+          </div>
+        </div>
+
+        <!-- Metric 7: Average Container Fill Level -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm hover:shadow transition">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase mb-1">
+            <span id="kpi7_title">Avg Fleet Fill Level</span>
+            <span class="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            </span>
+          </div>
+          <div class="flex items-baseline space-x-2 rtl:space-x-reverse">
+            <span id="metricAvgFill" class="text-2xl font-black text-navy-900">62.4%</span>
+            <span class="text-xs text-slate-500 font-medium">network avg</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
+            <span id="kpi7_sub">Active depth telemetry</span>
+            <span class="text-slate-700 font-medium">Updated < 15m ago</span>
+          </div>
+        </div>
+
+        <!-- Metric 8: Estimated Distance Saved vs Baseline -->
+        <div class="bg-gradient-to-br from-brand-600 to-emerald-700 p-4 rounded-xl text-white shadow-sm hover:shadow transition">
+          <div class="flex items-center justify-between text-teal-100 text-xs font-semibold uppercase mb-1">
+            <span id="kpi8_title">Simulated Distance Saved</span>
+            <span class="p-1.5 rounded-lg bg-white/20 text-white">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+            </span>
+          </div>
+          <div class="flex items-baseline space-x-2 rtl:space-x-reverse">
+            <span id="metricSavedPct" class="text-3xl font-black text-white">54.4%</span>
+            <span class="text-xs text-emerald-100 font-medium">vs fixed route</span>
+          </div>
+          <div class="mt-2 text-[11px] text-emerald-100 flex items-center justify-between">
+            <span id="kpi8_sub">Est. Net Trip Economy</span>
+            <span class="font-semibold bg-white/20 px-1.5 py-0.5 rounded text-[10px]">Simulated</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CHARTS & OPERATIONAL ALERTS ROW -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Chart 1: Fill Level Distribution -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="font-bold text-navy-900 text-sm" id="chart1Title">Container Fill-Level Distribution</h3>
+              <p class="text-xs text-slate-500" id="chart1Sub">Real-time status across 50 underground units</p>
+            </div>
+            <span class="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-md font-mono">Sensors: LoRaWAN</span>
+          </div>
+          <div class="h-56 relative">
+            <canvas id="fillDistributionChart"></canvas>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 grid grid-cols-4 gap-2 text-center text-[11px]">
+            <div><span class="block w-2.5 h-2.5 mx-auto rounded-full bg-emerald-500 mb-1"></span><span class="text-slate-500">0-49%</span> <b id="cntLow" class="block text-navy-900">18</b></div>
+            <div><span class="block w-2.5 h-2.5 mx-auto rounded-full bg-amber-500 mb-1"></span><span class="text-slate-500">50-79%</span> <b id="cntMed" class="block text-navy-900">14</b></div>
+            <div><span class="block w-2.5 h-2.5 mx-auto rounded-full bg-orange-500 mb-1"></span><span class="text-slate-500">80-89%</span> <b id="cntHigh" class="block text-navy-900">13</b></div>
+            <div><span class="block w-2.5 h-2.5 mx-auto rounded-full bg-red-500 mb-1"></span><span class="text-slate-500">90-100%</span> <b id="cntCrit" class="block text-navy-900">5</b></div>
+          </div>
+        </div>
+
+        <!-- Chart 2: Daily Collection Comparison (Strategy A vs B vs C) -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="font-bold text-navy-900 text-sm" id="chart2Title">Route Distance by Collection Strategy</h3>
+              <p class="text-xs text-slate-500" id="chart2Sub">Simulated weekly mileage comparison (km)</p>
+            </div>
+            <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-md font-semibold" id="chart2Badge">-54% Avg Distance</span>
+          </div>
+          <div class="h-56 relative">
+            <canvas id="strategyComparisonChart"></canvas>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-around text-[11px] text-slate-600">
+            <span class="flex items-center"><span class="w-3 h-3 bg-slate-400 rounded-sm mr-1.5 rtl:ml-1.5 inline-block"></span> Fixed Schedule</span>
+            <span class="flex items-center"><span class="w-3 h-3 bg-amber-400 rounded-sm mr-1.5 rtl:ml-1.5 inline-block"></span> Threshold Only</span>
+            <span class="flex items-center"><span class="w-3 h-3 bg-brand-600 rounded-sm mr-1.5 rtl:ml-1.5 inline-block"></span> MUDRIK CVRP</span>
+          </div>
+        </div>
+
+        <!-- Priority Attention Queue & System Health Alerts -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="font-bold text-navy-900 text-sm" id="alertsTitle">Critical Urgency Dispatch Queue</h3>
+              <p class="text-xs text-slate-500" id="alertsSub">Highest risk containers needing immediate service</p>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-700">Action Required</span>
+          </div>
+
+          <div id="urgentContainerList" class="space-y-2.5 overflow-y-auto max-h-64 pr-1">
+            <!-- Dynamically populated container alert cards -->
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Sensors Status: <b class="text-emerald-600">94% Online</b> (3 Offline)</span>
+            <button onclick="switchTab('monitoring')" class="text-brand-600 font-semibold hover:underline">View All 50 Units →</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RECENT COLLECTION LOGS PREVIEW -->
+      <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 class="font-bold text-navy-900 text-sm" id="recentLogsTitle">Recent Collection Interventions & Depot Logs</h3>
+            <p class="text-xs text-slate-500" id="recentLogsSub">Simulated chronological discharge events in Jeddah districts</p>
+          </div>
+          <button onclick="switchTab('history')" class="text-xs font-semibold text-brand-600 hover:text-brand-700">View Full Log History & Weight Breakdown →</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-50 text-slate-500 uppercase font-semibold text-[10px]">
+              <tr>
+                <th class="px-6 py-3">Timestamp</th>
+                <th class="px-6 py-3">Container ID</th>
+                <th class="px-6 py-3">Zone / Location</th>
+                <th class="px-6 py-3">Truck Assigned</th>
+                <th class="px-6 py-3">Fill Before / After</th>
+                <th class="px-6 py-3">Collected Vol. (m³)</th>
+                <th class="px-6 py-3">Est. Weight (kg)</th>
+                <th class="px-6 py-3">Status</th>
+              </tr>
+            </thead>
+            <tbody id="dashboardRecentTableBody" class="divide-y divide-slate-100 font-medium">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- 2. TAB: CONTAINER MONITORING & GIS MAP -->
+    <section id="view-monitoring" class="hidden space-y-4">
+      
+      <!-- Filter Bar -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="font-bold text-navy-900 flex items-center space-x-1 rtl:space-x-reverse">
+            <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+            <span id="filterLabel">Filter Containers:</span>
+          </span>
+          
+          <!-- Zone Filter -->
+          <select id="mapFilterZone" onchange="applyContainerFilters()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:border-brand-500 font-medium text-slate-700">
+            <option value="ALL">All Zones (Jeddah All)</option>
+            <option value="Al-Shati">Al-Shati (North Corniche)</option>
+            <option value="Al-Hamra">Al-Hamra (Palace / Middle)</option>
+            <option value="Al-Rawdah">Al-Rawdah (Commercial / Res)</option>
+            <option value="Al-Andalus">Al-Andalus (Tahlia District)</option>
+            <option value="Al-Balad">Al-Balad (Historic Heritage)</option>
+          </select>
+
+          <!-- Status Filter -->
+          <select id="mapFilterStatus" onchange="applyContainerFilters()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:border-brand-500 font-medium text-slate-700">
+            <option value="ALL">All Statuses (50)</option>
+            <option value="CRITICAL">Critical Overflow Risk (≥90%)</option>
+            <option value="HIGH">High Fill (80-89%)</option>
+            <option value="MEDIUM">Medium Fill (50-79%)</option>
+            <option value="NORMAL">Normal (0-49%)</option>
+            <option value="OFFLINE">Sensors Offline / Error</option>
+          </select>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-600">
+          <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block mr-1 rtl:ml-1"></span> 0-49%</span>
+          <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block mr-1 rtl:ml-1"></span> 50-79%</span>
+          <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-orange-500 inline-block mr-1 rtl:ml-1"></span> 80-89%</span>
+          <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-red-500 inline-block mr-1 rtl:ml-1 animate-ping"></span> 90-100% Critical</span>
+          <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-slate-400 inline-block mr-1 rtl:ml-1"></span> Offline</span>
+          <span class="flex items-center"><span class="w-3 h-3 rounded-md bg-blue-600 inline-block mr-1 rtl:ml-1"></span> Depot</span>
+        </div>
+      </div>
+
+      <!-- MAP + DETAIL DRAWER CONTAINER -->
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 relative">
+        
+        <!-- Large Leaflet Map (Col 3 or 4) -->
+        <div class="lg:col-span-3 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden h-[620px] relative">
+          <div id="gisMap" class="w-full h-full z-10"></div>
+          
+          <!-- Map Floating Badge -->
+          <div class="absolute bottom-4 left-4 z-20 bg-white/90 backdrop-blur-md px-3 py-2 rounded-xl shadow-md border border-slate-200 text-xs text-navy-900 pointer-events-none">
+            <p class="font-bold flex items-center space-x-1.5 rtl:space-x-reverse">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>Jeddah Municipal Underground GIS</span>
+            </p>
+            <p class="text-[10px] text-slate-500">Double click or click marker to inspect hydraulic pit telemetry</p>
+          </div>
+        </div>
+
+        <!-- Container Detail Drawer / Sidebar (Col 1) -->
+        <div class="lg:col-span-1 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between h-[620px] overflow-y-auto" id="containerDetailPanel">
+          <div id="containerSelectedContent">
+            <div class="text-center py-12 text-slate-400">
+              <svg class="w-12 h-12 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+              <p class="font-semibold text-xs text-slate-600">No Container Selected</p>
+              <p class="text-[11px] text-slate-400 mt-1">Click any underground container pin on the map to inspect its sensor readings, fill level, and history.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- 3. TAB: ROUTE PLANNER (CORE CVRP OPTIMIZATION ENGINE) -->
+    <section id="view-routes" class="hidden space-y-6">
+      
+      <!-- Route Planner Controls Header -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 mb-4 border-b border-slate-100 gap-4">
+          <div>
+            <h2 class="text-lg font-bold text-navy-900" id="routePlannerHeading">Capacitated Vehicle Route Optimization (CVRP)</h2>
+            <p class="text-xs text-slate-500" id="routePlannerSub">Solves multi-stop routing with truck capacity constraints and container urgency prioritization using 2-Opt local search heuristics.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="runBaselineSchedule()" class="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition">
+              <span id="btnGenBaseline">1. Generate Fixed Schedule Baseline</span>
+            </button>
+            <button onclick="runMudrikOptimization()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-700 hover:to-emerald-700 text-white text-xs font-bold shadow-md transition flex items-center space-x-1.5 rtl:space-x-reverse">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              <span id="btnRunMudrik">2. Generate MUDRIK Optimized Route</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Configuration Parameters -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
+          
+          <!-- Parameter 1: Select Truck -->
+          <div>
+            <label class="block text-slate-500 font-semibold mb-1" id="lblTruckSelect">Assigned Vehicle</label>
+            <select id="cfgTruckSelect" onchange="updateTruckConfig()" class="w-full border border-slate-300 rounded-lg p-2 font-medium bg-slate-50">
+              <option value="TRK-101">Truck TRK-101 (Volvo FE Compactor - 20 m³)</option>
+              <option value="TRK-102">Truck TRK-102 (Mercedes Actros - 25 m³)</option>
+              <option value="TRK-103">Truck TRK-103 (Iveco Eurocargo - 18 m³)</option>
+              <option value="TRK-104">Truck TRK-104 (MAN TGM Hydraulic - 22 m³)</option>
+            </select>
+          </div>
+
+          <!-- Parameter 2: Truck Volumetric Capacity -->
+          <div>
+            <label class="block text-slate-500 font-semibold mb-1" id="lblTruckCap">Truck Capacity Limit (m³)</label>
+            <input type="number" id="cfgTruckCapacity" value="20" min="10" max="40" step="1" onchange="recalcCurrentRoute()" class="w-full border border-slate-300 rounded-lg p-2 font-medium bg-slate-50">
+          </div>
+
+          <!-- Parameter 3: Collection Fill Threshold Slider -->
+          <div>
+            <div class="flex justify-between font-semibold mb-1">
+              <label class="text-slate-500" id="lblFillThresh">Dispatch Fill Threshold</label>
+              <span id="cfgFillThresholdVal" class="text-brand-600 font-bold">≥ 75%</span>
+            </div>
+            <input type="range" id="cfgFillThreshold" min="50" max="90" value="75" step="5" oninput="updateFillSliderVal(this.value)" class="w-full accent-brand-600 cursor-pointer">
+          </div>
+
+          <!-- Parameter 4: Service Zone Selection -->
+          <div>
+            <label class="block text-slate-500 font-semibold mb-1" id="lblServiceZone">Target Service Zone</label>
+            <select id="cfgServiceZone" class="w-full border border-slate-300 rounded-lg p-2 font-medium bg-slate-50">
+              <option value="ALL">All Jeddah Zones (50 Units)</option>
+              <option value="Al-Shati">Al-Shati Sector Only</option>
+              <option value="Al-Hamra">Al-Hamra Sector Only</option>
+              <option value="Al-Rawdah">Al-Rawdah Sector Only</option>
+              <option value="Al-Andalus">Al-Andalus Sector Only</option>
+              <option value="Al-Balad">Al-Balad Sector Only</option>
+            </select>
+          </div>
+
+          <!-- Parameter 5: Depot Location -->
+          <div>
+            <label class="block text-slate-500 font-semibold mb-1" id="lblDepotSelect">Central Municipal Depot</label>
+            <select id="cfgDepotLocation" class="w-full border border-slate-300 rounded-lg p-2 font-medium bg-slate-50">
+              <option value="DEPOT-JED-01">Jeddah Main Depot (Al-Balad South)</option>
+              <option value="DEPOT-JED-02">North Corniche Auxiliary Yard</option>
+            </select>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Route Visualization & Stop List Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Map View for Routes -->
+        <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
+          <div class="p-3 border-b border-slate-100 flex items-center justify-between text-xs bg-slate-50">
+            <div class="flex items-center space-x-3 rtl:space-x-reverse font-semibold">
+              <span class="flex items-center text-slate-500"><span class="w-3 h-0.5 border-t-2 border-dashed border-slate-400 mr-1.5 rtl:ml-1.5"></span> Fixed Baseline</span>
+              <span class="flex items-center text-brand-700"><span class="w-4 h-1 bg-brand-600 rounded mr-1.5 rtl:ml-1.5 inline-block"></span> MUDRIK 2-Opt Optimized</span>
+            </div>
+            <span id="routeActiveStatusLabel" class="text-xs font-bold text-brand-700 bg-brand-100/70 px-2 py-0.5 rounded-md">Optimized Route Displayed</span>
+          </div>
+          <div class="h-[520px] relative">
+            <div id="routeMap" class="w-full h-full z-10"></div>
+          </div>
+        </div>
+
+        <!-- Route Breakdown & Metrics Sidebar -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 flex flex-col justify-between h-[565px] overflow-hidden">
+          <div>
+            <h3 class="font-bold text-navy-900 text-sm mb-1" id="routeSummaryTitle">Generated Trip Performance</h3>
+            <p class="text-xs text-slate-500 mb-3" id="routeSummarySub">Calculated from Euclidean coordinates with 1.25 urban street winding factor.</p>
+
+            <!-- Metrics grid for the route -->
+            <div class="grid grid-cols-2 gap-2 text-xs mb-4">
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-slate-400 block text-[10px] uppercase font-bold" id="lblStopsCnt">Stops Assigned</span>
+                <span id="rtMetricStops" class="text-lg font-black text-navy-900">18 stops</span>
+                <span class="text-[10px] text-slate-500 block">out of 50 total</span>
+              </div>
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-slate-400 block text-[10px] uppercase font-bold" id="lblTotDistance">Trip Distance</span>
+                <span id="rtMetricKm" class="text-lg font-black text-brand-600">38.4 km</span>
+                <span class="text-[10px] text-emerald-600 font-semibold block">-54.4% vs Fixed</span>
+              </div>
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-slate-400 block text-[10px] uppercase font-bold" id="lblEstDuration">Est. Driving Time</span>
+                <span id="rtMetricTime" class="text-lg font-black text-navy-900">1h 17m</span>
+                <span class="text-[10px] text-slate-500 block">@ 30 km/h city avg</span>
+              </div>
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-slate-400 block text-[10px] uppercase font-bold" id="lblFuelConsumed">Est. Diesel Used</span>
+                <span id="rtMetricFuel" class="text-lg font-black text-navy-900">14.6 L</span>
+                <span class="text-[10px] text-emerald-600 font-semibold block">Saved 17.4 L</span>
+              </div>
+            </div>
+
+            <!-- Capacity Progress Bar -->
+            <div class="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
+              <div class="flex justify-between font-semibold mb-1">
+                <span class="text-slate-600" id="lblTruckLoad">Vehicle Volumetric Payload</span>
+                <span id="rtTruckLoadPct" class="text-brand-700 font-bold">18.6 m³ / 20 m³ (93%)</span>
+              </div>
+              <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                <div id="rtTruckLoadBar" class="bg-brand-600 h-full rounded-full transition-all duration-500" style="width: 93%;"></div>
+              </div>
+              <p class="text-[10px] text-slate-400 mt-1" id="lblTruckLoadNote">Respects 20 m³ compactor limit. Auto-routed to depot before overload.</p>
+            </div>
+
+            <h4 class="font-bold text-navy-900 text-xs uppercase tracking-wider mb-2" id="lblTurnSequence">Sequential Dispatch Stops</h4>
+          </div>
+
+          <!-- Stop Sequence Scroll Area -->
+          <div class="overflow-y-auto flex-1 pr-1 space-y-1.5 text-xs" id="routeStopsList">
+            <!-- Dynamically injected turn list -->
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- 4. TAB: BASELINE MATRIX COMPARISON (3 STRATEGIES) -->
+    <section id="view-comparison" class="hidden space-y-6">
+      
+      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="max-w-3xl mb-6">
+          <span class="text-xs uppercase tracking-wider font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-md">Rigorous Scientific Benchmarking</span>
+          <h2 class="text-xl font-black text-navy-900 mt-1 mb-2" id="cmpTitle">Operational Strategy Comparison Matrix</h2>
+          <p class="text-xs text-slate-500 leading-relaxed" id="cmpSub">
+            All three models are evaluated against the exact same initial simulated dataset of 50 underground waste containers in Jeddah. This comparison highlights why data-driven dynamic dispatching outclasses traditional scheduled municipal rounds.
+          </p>
+        </div>
+
+        <!-- 3 Strategy Cards / Columns -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          <!-- Strategy A: Fixed Schedule -->
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Strategy A</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">Traditional</span>
+              </div>
+              <h3 class="text-base font-bold text-navy-900 mb-1" id="stratATitle">Fixed Schedule Rounds</h3>
+              <p class="text-xs text-slate-500 mb-4" id="stratADesc">Truck visits every container sequentially regardless of fill level. Highly inefficient, collecting empty bins.</p>
+              
+              <div class="space-y-3 text-xs">
+                <div class="flex justify-between py-1.5 border-b border-slate-200">
+                  <span class="text-slate-500" id="cA_stops">Stops Visited</span>
+                  <b class="text-navy-900">50 stops (100%)</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-slate-200">
+                  <span class="text-slate-500" id="cA_dist">Total Distance</span>
+                  <b class="text-red-600">84.2 km</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-slate-200">
+                  <span class="text-slate-500" id="cA_time">Estimated Duration</span>
+                  <b class="text-navy-900">3h 48m</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-slate-200">
+                  <span class="text-slate-500" id="cA_fuel">Fuel Consumed</span>
+                  <b class="text-red-600">32.0 Liters</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-slate-200">
+                  <span class="text-slate-500" id="cA_empty">Empty/Low Visits (&lt;50%)</span>
+                  <b class="text-red-600 font-bold">18 unnecessary stops</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-slate-200">
+                  <span class="text-slate-500" id="cA_overflow">Overflow Risk Remaining</span>
+                  <b class="text-amber-600">None (all visited)</b>
+                </div>
+                <div class="flex justify-between py-1.5">
+                  <span class="text-slate-500" id="cA_trips">Depot Return Trips</span>
+                  <b class="text-navy-900">3 trips (overloaded)</b>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 bg-white p-3 rounded-xl border border-slate-200 text-center text-xs">
+              <span class="text-slate-400 block text-[10px]">BASELINE BENCHMARK</span>
+              <span class="font-extrabold text-slate-700">0% Distance Saved</span>
+            </div>
+          </div>
+
+          <!-- Strategy B: Fill-Level Threshold Only -->
+          <div class="bg-amber-50/50 border border-amber-200 rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-amber-700 uppercase tracking-wider">Strategy B</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Threshold Only</span>
+              </div>
+              <h3 class="text-base font-bold text-navy-900 mb-1" id="stratBTitle">Static Threshold Dispatch</h3>
+              <p class="text-xs text-slate-500 mb-4" id="stratBDesc">Dispatches to containers &ge; 75% fill, but follows standard un-optimized arrival order without 2-Opt or capacity balancing.</p>
+              
+              <div class="space-y-3 text-xs">
+                <div class="flex justify-between py-1.5 border-b border-amber-200/60">
+                  <span class="text-slate-500" id="cB_stops">Stops Visited</span>
+                  <b class="text-navy-900">18 stops (36%)</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-amber-200/60">
+                  <span class="text-slate-500" id="cB_dist">Total Distance</span>
+                  <b class="text-amber-700">56.8 km</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-amber-200/60">
+                  <span class="text-slate-500" id="cB_time">Estimated Duration</span>
+                  <b class="text-navy-900">2h 05m</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-amber-200/60">
+                  <span class="text-slate-500" id="cB_fuel">Fuel Consumed</span>
+                  <b class="text-amber-700">21.6 Liters</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-amber-200/60">
+                  <span class="text-slate-500" id="cB_empty">Empty/Low Visits (&lt;50%)</span>
+                  <b class="text-emerald-700 font-bold">0 visits (Avoided)</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-amber-200/60">
+                  <span class="text-slate-500" id="cB_overflow">Overflow Risk Remaining</span>
+                  <b class="text-amber-700">Low (threshold swept)</b>
+                </div>
+                <div class="flex justify-between py-1.5">
+                  <span class="text-slate-500" id="cB_trips">Depot Return Trips</span>
+                  <b class="text-navy-900">1 trip</b>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 bg-white p-3 rounded-xl border border-amber-200 text-center text-xs">
+              <span class="text-slate-400 block text-[10px]">SAVINGS VS BASELINE</span>
+              <span class="font-extrabold text-amber-600">32.5% Distance Saved</span>
+            </div>
+          </div>
+
+          <!-- Strategy C: MUDRIK Optimized CVRP -->
+          <div class="bg-gradient-to-b from-brand-50 to-white border-2 border-brand-500 rounded-2xl p-5 flex flex-col justify-between shadow-md relative">
+            <div class="absolute -top-3 right-4 rtl:left-4 rtl:right-auto bg-brand-600 text-white text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full shadow-sm">
+              Recommended Model
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-brand-700 uppercase tracking-wider">Strategy C</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-100 text-brand-800">MUDRIK CVRP</span>
+              </div>
+              <h3 class="text-base font-bold text-navy-900 mb-1" id="stratCTitle">MUDRIK Dynamic CVRP</h3>
+              <p class="text-xs text-slate-500 mb-4" id="stratCDesc">Combines ultrasonic fill urgency, 2-Opt shortest-path sequencing, container volume aggregation, and truck return constraints.</p>
+              
+              <div class="space-y-3 text-xs">
+                <div class="flex justify-between py-1.5 border-b border-brand-100">
+                  <span class="text-slate-500" id="cC_stops">Stops Visited</span>
+                  <b class="text-brand-900">18 stops (Optimal)</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-brand-100">
+                  <span class="text-slate-500" id="cC_dist">Total Distance</span>
+                  <b class="text-brand-700 font-extrabold">38.4 km</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-brand-100">
+                  <span class="text-slate-500" id="cC_time">Estimated Duration</span>
+                  <b class="text-brand-900 font-bold">1h 17m</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-brand-100">
+                  <span class="text-slate-500" id="cC_fuel">Fuel Consumed</span>
+                  <b class="text-brand-700 font-extrabold">14.6 Liters</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-brand-100">
+                  <span class="text-slate-500" id="cC_empty">Empty/Low Visits (&lt;50%)</span>
+                  <b class="text-emerald-600 font-bold">0 visits (18 avoided)</b>
+                </div>
+                <div class="flex justify-between py-1.5 border-b border-brand-100">
+                  <span class="text-slate-500" id="cC_overflow">Overflow Risk Mitigated</span>
+                  <b class="text-emerald-600 font-bold">100% High Risk Serviced</b>
+                </div>
+                <div class="flex justify-between py-1.5">
+                  <span class="text-slate-500" id="cC_trips">Capacity Utilization</span>
+                  <b class="text-brand-700">93% (1 optimal run)</b>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 bg-brand-600 text-white p-3 rounded-xl text-center text-xs shadow-sm">
+              <span class="text-teal-100 block text-[10px]">PROVED SIMULATION ECONOMY</span>
+              <span class="font-black text-white text-sm">54.4% Distance Saved (45.8 km)</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Rigorous Mathematical Transparency Box -->
+        <div class="mt-6 p-4 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-600 leading-relaxed">
+          <p class="font-bold text-navy-900 mb-1 flex items-center space-x-1 rtl:space-x-reverse">
+            <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span id="transparencyHeading">Algorithmic Integrity & Mathematical Note</span>
+          </p>
+          <p id="transparencyText">
+            Results above are directly derived from the simulated Jeddah test coordinates. Distance calculations utilize the Euclidean metric factored by 1.25 to reflect street grid curvature. Diesel consumption is evaluated at 38 L/100 km for a standard municipal 3-axle compactor. Financial and environmental figures represent calculated prototype outputs under simulated parameters and do not constitute real audit claims.
+          </p>
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- 5. TAB: COLLECTION HISTORY & VEHICLE DATA -->
+    <section id="view-history" class="hidden space-y-6">
+      
+      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 mb-4 border-b border-slate-100 gap-3">
+          <div>
+            <h2 class="text-lg font-bold text-navy-900" id="historyTitle">Collection Event Records & Sensor Telemetry Logs</h2>
+            <p class="text-xs text-slate-500" id="historySub">Audit trail of container pickups, truck weigh-ins, and post-collection ultrasonic validation.</p>
+          </div>
+          <div class="flex items-center space-x-2 rtl:space-x-reverse">
+            <button onclick="exportCSVData()" class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold hover:bg-slate-50 text-slate-700 flex items-center space-x-1 rtl:space-x-reverse transition">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              <span>Export CSV</span>
+            </button>
+            <button onclick="window.print()" class="px-3 py-1.5 rounded-lg bg-navy-900 text-white text-xs font-semibold hover:bg-navy-800 flex items-center space-x-1 rtl:space-x-reverse transition">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+              <span>Print Audit Sheet</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Essential Methodology Warning on Weights -->
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3.5 mb-4 text-xs text-blue-900 flex items-start space-x-2.5 rtl:space-x-reverse">
+          <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <div>
+            <span class="font-bold block" id="weightNoteHeading">Payload Weight Measurement Methodology Distinction</span>
+            <p class="text-[11px] text-blue-800 mt-0.5" id="weightNoteText">
+              <b>Important engineering caveat:</b> Individual container weights shown below are <i>estimated</i> by multiplying the ultrasonic volume displacement (m³) by typical municipal solid waste density (~280 kg/m³ for uncompacted urban residential refuse). Only total cumulative trip weight is <i>measured</i> via the collection truck’s onboard axle load-cells at the depot weighbridge. Individual container weights cannot be treated as certified scale measurements.
+            </p>
+          </div>
+        </div>
+
+        <!-- History Table -->
+        <div class="overflow-x-auto rounded-xl border border-slate-200">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-100 text-slate-700 uppercase font-semibold text-[10px]">
+              <tr>
+                <th class="px-4 py-3">Log ID</th>
+                <th class="px-4 py-3">Timestamp</th>
+                <th class="px-4 py-3">Container ID</th>
+                <th class="px-4 py-3">Zone</th>
+                <th class="px-4 py-3">Assigned Truck</th>
+                <th class="px-4 py-3">Fill Pre/Post</th>
+                <th class="px-4 py-3">Vol. Collected</th>
+                <th class="px-4 py-3">Estimated Weight</th>
+                <th class="px-4 py-3">Weight Class</th>
+                <th class="px-4 py-3">Verification</th>
+              </tr>
+            </thead>
+            <tbody id="fullHistoryTableBody" class="divide-y divide-slate-100 font-medium">
+              <!-- Dynamically populated history logs -->
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- 6. TAB: KPI ANALYTICS & REPORTS -->
+    <section id="view-analytics" class="hidden space-y-6">
+      
+      <!-- Analytics Filters & Date Range -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4 text-xs">
+        <div>
+          <h2 class="text-base font-bold text-navy-900" id="analyticsTitle">Municipal Waste Operational Analytics</h2>
+          <p class="text-slate-500 text-[11px]" id="analyticsSub">Aggregated operational metrics, overflow prevention success, and vehicle emissions modeling</p>
+        </div>
+        <div class="flex items-center space-x-2 rtl:space-x-reverse">
+          <span class="font-semibold text-slate-600">Period:</span>
+          <select class="border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50 font-medium">
+            <option>Last 7 Days (Demo Set)</option>
+            <option>Last 30 Days</option>
+            <option>Current Fiscal Quarter</option>
+          </select>
+          <button onclick="exportQuickReport()" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-3 py-1.5 rounded-lg transition">Download Full Summary</button>
+        </div>
+      </div>
+
+      <!-- 4 Analytic Deep-Dive Charts -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Deep Chart 1: Distance & Fuel Saved Trends -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <h3 class="font-bold text-navy-900 text-sm mb-1" id="anChart1Title">Daily Distance Travelled (km) — Baseline vs MUDRIK</h3>
+          <p class="text-xs text-slate-500 mb-3">Simulated 7-day comparative analysis across Jeddah pilot sectors</p>
+          <div class="h-64 relative">
+            <canvas id="analyticsDistanceChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Deep Chart 2: Zone-Wise Collection Efficiency -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <h3 class="font-bold text-navy-900 text-sm mb-1" id="anChart2Title">Waste Volume Collected by Sector (m³)</h3>
+          <p class="text-xs text-slate-500 mb-3">Distribution between Al-Shati, Al-Hamra, Al-Rawdah, Al-Andalus, Al-Balad</p>
+          <div class="h-64 relative">
+            <canvas id="analyticsZoneChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Deep Chart 3: Overflow Risks Prevented -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <h3 class="font-bold text-navy-900 text-sm mb-1" id="anChart3Title">Overflow Risk Incidents Over Time</h3>
+          <p class="text-xs text-slate-500 mb-3">Containers reaching &ge;90% capacity and mitigation response time</p>
+          <div class="h-64 relative">
+            <canvas id="analyticsOverflowChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Deep Chart 4: Truck Capacity Utilization Efficiency -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <h3 class="font-bold text-navy-900 text-sm mb-1" id="anChart4Title">Fleet Capacity Utilization Rate (%)</h3>
+          <p class="text-xs text-slate-500 mb-3">Percentage of truck volume utilized per collection run</p>
+          <div class="h-64 relative">
+            <canvas id="analyticsFleetChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- 7. TAB: SYSTEM METHODOLOGY & SPECS -->
+    <section id="view-methodology" class="hidden space-y-6">
+      
+      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+        <h2 class="text-xl font-black text-navy-900 mb-2" id="specTitle">MUDRIK System Architecture & Algorithmic Specifications</h2>
+        <p class="text-xs text-slate-500 leading-relaxed max-w-3xl mb-6" id="specSub">
+          This section details the mathematical formulas, hardware IoT topologies, and routing heuristics used to demonstrate MUDRIK at the smart-cities hackathon.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-700">
+          
+          <!-- Box 1: Mathematical Formulas -->
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <h3 class="font-bold text-navy-900 text-sm flex items-center space-x-1.5 rtl:space-x-reverse">
+              <span class="w-2 h-2 rounded-full bg-brand-600"></span>
+              <span>1. Mathematical Evaluation Formulas</span>
+            </h3>
+            
+            <div class="bg-white p-3 rounded-lg border border-slate-200 font-mono text-[11px] space-y-2">
+              <div>
+                <b class="text-slate-800">Distance Reduction (%)</b><br>
+                <code>= ((Baseline Distance - Optimized Distance) / Baseline Distance) * 100</code>
+              </div>
+              <div class="border-t border-slate-100 pt-2">
+                <b class="text-slate-800">Estimated Fuel Consumed (L)</b><br>
+                <code>= Route Distance (km) * (Vehicle Consumption Rate [38 L/100km]) / 100</code>
+              </div>
+              <div class="border-t border-slate-100 pt-2">
+                <b class="text-slate-800">Priority Urgency Score (P_i)</b><br>
+                <code>= (Fill% * 1.5) + (HoursSinceLastCollection * 0.4) + (CriticalRiskFactor * 25)</code>
+              </div>
+            </div>
+            <p class="text-slate-500 text-[11px]">
+              Assumptions: Fuel cost indexed at SAR 1.15 per liter of municipal diesel. Vehicle consumption rate is fixed at 38 L/100km representing standard 20m³ hydraulic compactors.
+            </p>
+          </div>
+
+          <!-- Box 2: Routing Algorithm Heuristic -->
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <h3 class="font-bold text-navy-900 text-sm flex items-center space-x-1.5 rtl:space-x-reverse">
+       
